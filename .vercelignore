@@ -1,0 +1,8 @@
+.env
+__pycache__/
+.gmail_app_password
+tracker.json
+serve.py
+.site_password
+.env.local
+.gmail_accounts.json

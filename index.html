@@ -1,0 +1,327 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>YC Outreach</title>
+<style>
+:root{--bg:#fafaf8;--card:#fff;--fg:#1c1c1a;--muted:#77766f;--line:#e8e7e2;--accent:#e2561b;--ok:#1f8a4c}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1e1e1c;--fg:#ecebe6;--muted:#9a998f;--line:#302f2b;--accent:#f07a45;--ok:#4cc27d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:22px;margin:0 0 16px}a{color:var(--accent)}
+input,select,textarea,button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+button{cursor:pointer}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button:disabled{opacity:.5;cursor:default}
+.filters{display:flex;gap:8px;margin-bottom:10px;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:1}
+.filters input{flex:1;min-width:0}
+.count{color:var(--muted);font-size:13px;margin:0 0 8px}
+.row{display:flex;align-items:baseline;gap:10px;padding:11px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.row:hover{background:var(--card)}.row .n{font-weight:600}.row .o{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.row{content-visibility:auto;contain-intrinsic-size:auto 44px}
+.tag[data-chip]{cursor:pointer}
+.tag.r-positive{color:#fff;background:var(--ok)}.tag.r-neutral{color:var(--accent);border-color:var(--accent)}.tag.r-no,.tag.r-bounced{color:#c0392b;border-color:#c0392b}.tag.r-auto,.tag.due{color:var(--muted);border-color:var(--line)}
+.rep{margin-top:22px;padding-top:6px;border-top:1px solid var(--line)}.rep .seg{display:flex;gap:6px;flex-wrap:wrap}.rep .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.funnel{display:flex;gap:6px;margin:0 0 18px;font-size:13px;color:var(--muted);flex-wrap:wrap}.funnel b{color:var(--fg)}
+.tag.acct{color:var(--muted);border-color:var(--line)}
+.row .b{color:var(--muted);font-size:12px;white-space:nowrap}
+.tag{font-size:12px;color:var(--ok);border:1px solid var(--ok);border-radius:99px;padding:0 8px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sub{color:var(--muted);margin:0 0 14px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+.to{display:flex;gap:8px}.to select{flex:1;min-width:0}
+textarea{width:100%;min-height:330px;line-height:1.5;resize:vertical}input.w{width:100%}
+.acts{display:flex;gap:8px;margin-top:14px;align-items:center}
+details.tp{margin:0 0 12px;color:var(--muted);font-size:13px}details.tp summary{cursor:pointer}
+details.tp textarea{min-height:240px;margin-top:6px}
+.msg{font-size:13px;color:var(--muted)}
+.warn{background:#c0392b;color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-weight:600;font-size:16px}
+.hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.hd h1{margin:0}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.card b{display:block;font-size:26px;line-height:1.2}.card span{color:var(--muted);font-size:12px}
+.seg{display:flex;gap:6px;margin-bottom:10px}.seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chart{display:flex;align-items:flex-end;gap:6px;height:190px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.col i{display:block;width:100%;max-width:38px;min-height:2px}.col em{font-style:normal;font-size:11px;color:var(--muted)}
+.labels{display:flex;gap:6px;margin-bottom:22px}.labels span{flex:1;text-align:center;font-size:11px;color:var(--muted);min-width:0;overflow:hidden;white-space:nowrap}
+table.acct{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:13px}table.acct th{text-align:left;color:var(--muted);font-weight:500;padding:6px 4px}
+table.acct td{padding:8px 4px;border-top:1px solid var(--line)}table.acct i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}table.acct tr.all td{font-weight:600}
+.days>div{display:flex;justify-content:space-between;padding:8px 2px;border-bottom:1px solid var(--line)}.days span{color:var(--muted)}
+</style></head><body><main id="app"></main>
+<script>
+const DEFAULT_TPL = {
+  subject: "{company} needs me!",
+  body: `Hey {first_name},
+
+saw {company} and {one_liner}, really stood out.
+
+I'm {your_background}, and I'd love to explore if there's a role for me at {company}.
+
+- {your_name}
+{your_links}`
+};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } };
+let PASS = store.get("yc-pass", "");
+const hdr = () => ({ "X-Pass": PASS });
+const api = async p => {
+  const r = await fetch("/api/yc?" + new URLSearchParams(p), { headers: hdr() });
+  const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (r.status === 401) { store.set("yc-pass", ""); PASS = ""; login("Wrong password"); throw new Error("Wrong password") }
+  if (!r.ok) throw new Error(j.error); return j };
+function login(msg) {
+  $("#app").innerHTML = `<div style="max-width:280px;margin:18vh auto 0;text-align:center"><h1>YC Outreach</h1>
+    <input id="pw" type="password" placeholder="Password" style="width:100%;text-align:center" autofocus>
+    <p class="msg" id="pwm">${msg || ""}</p></div>`;
+  $("#pw").onkeydown = e => { if (e.key === "Enter") { PASS = e.target.value; store.set("yc-pass", PASS); start() } };
+}
+
+let tpl = Object.assign({}, DEFAULT_TPL, store.get("yc-tpl", {}));
+let T = {};                                  // tracker: slug -> { s: "drafted" | "sent" }, kept in tracker.json
+let BY = store.get("yc-companies2", {});      // batch -> companies
+let F = store.get("yc-founders", {});        // slug -> founder data
+let view = { year: store.get("yc-year", ""), q: "", st: "", fit: store.get("yc-fit", "1") };
+
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today = () => ymd(new Date());   // local time, so each day starts at midnight
+const saveT = () => { store.set("yc-tracker", T); fetch("/api/track", { method: "POST", headers: hdr(), body: JSON.stringify(T) }).catch(() => {}) };
+let _all = null;
+const all = () => _all || (_all = Object.values(BY).flat().sort((a, b) => (b.hiring - a.hiring) || (b.launched_at || 0) - (a.launched_at || 0)));
+const yearOf = b => (String(b).match(/\d{4}/) || [""])[0];
+const filtered = () => {
+  const q = view.q.toLowerCase();
+  return all().filter(c => (!view.year || yearOf(c.batch) === view.year) && (view.fit !== "1" || c.fit) && (!q || (c.name + " " + (c.one_liner || "")).toLowerCase().includes(q))
+    && (!view.st || (view.st === "todo" ? !T[c.slug] : view.st === "replied" ? T[c.slug] && REAL(T[c.slug]) : view.st === "due" ? T[c.slug] && due(T[c.slug]) : T[c.slug]?.s === view.st)));
+};
+
+// ---------- list page ----------
+function list() {
+  const years = [...new Set(Object.keys(BY).map(yearOf))].filter(Boolean).sort().reverse();
+  $("#app").innerHTML = `<div id="warn"></div>
+    <div class="hd"><h1>YC Outreach</h1><div style="display:flex;gap:10px;align-items:center"><span class="msg" id="ctr"></span><button id="trk">Tracker</button></div></div>
+    <details class="tp"><summary>Edit email template</summary>
+      <input class="w" id="tsub" value="${esc(tpl.subject)}"><textarea id="tbody">${esc(tpl.body)}</textarea>
+      <p>Use {company} {first_name} {one_liner}</p></details>
+    <div class="filters">
+      <select id="year"><option value="">All years</option>${years.map(y => `<option ${y === view.year ? "selected" : ""}>${y}</option>`).join("")}</select>
+      <input id="q" placeholder="Search company" value="${esc(view.q)}">
+      <select id="fit"><option value="1" ${view.fit === "1" ? "selected" : ""}>Remote-friendly software</option><option value="" ${view.fit ? "" : "selected"}>All companies</option></select>
+      <select id="st">${[["", "All"], ["todo", "To do"], ["drafted", "Drafted"], ["sent", "Sent"], ["replied", "Replied"], ["due", "Follow up"]].map(([v, l]) => `<option value="${v}" ${v === view.st ? "selected" : ""}>${l}</option>`).join("")}</select>
+    </div><p class="count" id="count"></p><div id="rows"></div>`;
+  $("#year").onchange = e => { view.year = e.target.value; store.set("yc-year", view.year); rows() };
+  let qt; $("#q").oninput = e => { view.q = e.target.value; clearTimeout(qt); qt = setTimeout(rows, 150) };
+  $("#fit").onchange = e => { view.fit = e.target.value; store.set("yc-fit", view.fit); rows() };
+  $("#st").onchange = e => { view.st = e.target.value; rows() };
+  $("#tsub").oninput = e => { tpl.subject = e.target.value; store.set("yc-tpl", tpl) };
+  $("#tbody").oninput = e => { tpl.body = e.target.value; store.set("yc-tpl", tpl) };
+  $("#trk").onclick = () => location.hash = "#/tracker";
+  warn(); rows();
+}
+function years() {
+  const y = $("#year"); if (!y) return;
+  const ys = [...new Set(Object.keys(BY).map(yearOf))].filter(Boolean).sort().reverse();
+  y.innerHTML = `<option value="">All years</option>` + ys.map(v => `<option ${v === view.year ? "selected" : ""}>${v}</option>`).join("");
+}
+function rows(keep) {
+  const r = $("#rows"); if (!r) return;
+  const L = filtered();
+  $("#count").textContent = `${L.length} companies${Object.keys(BY).length < LOADING ? " · loading more…" : ""}`;
+  if (!keep) SHOWN = 100; LIST = L; paint();
+}
+const from_ = t => t.a || ACC[0]?.email || "primary";   // drafts made before accounts were tracked came from the first account
+const route_ = t => `from ${from_(t)}${t.to ? " → to " + t.to : ""}`;
+const REAL = t => ["yes", "positive", "neutral", "no"].includes(t.r);   // they replied (older finer-grained values count as replied too)
+const due = t => t.s === "sent" && !REAL(t) && t.sd && (new Date(today()) - new Date(t.sd)) / 864e5 >= 4;   // sent 4+ days ago, no answer yet
+const chipOf = t => REAL(t) ? `<span class="tag r-positive">replied</span>` : `<span class="tag" data-chip="SLUG" title="Click to switch drafted / sent">${t.s}</span>`;
+let SHOWN = 100, LIST = [], BACK = null;   // BACK: where to return to when you come back from a company
+function paint() {
+  const r = $("#rows"); if (!r) return;
+  r.innerHTML = LIST.slice(0, SHOWN).map(c => `<div class="row" data-s="${esc(c.slug)}"><span class="n">${esc(c.name)}</span>
+    <span class="o">${esc(c.one_liner)}</span>${T[c.slug] ? `${chipOf(T[c.slug]).replace("SLUG", esc(c.slug))}${due(T[c.slug]) ? `<span class="tag due">follow up</span>` : ""}<span class="tag acct" title="${esc(route_(T[c.slug]))}">${esc(from_(T[c.slug]).split("@")[0])}</span>` : ""}<span class="b">${c.hiring ? `<b style="color:var(--accent)">hiring</b> · ` : ""}${c.remote ? "remote · " : ""}${esc(c.batch)}</span></div>`).join("")
+    + (LIST.length > SHOWN ? `<div id="more" style="height:1px"></div>` : "");
+  const m = $("#more"); if (m) new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { o.disconnect(); SHOWN += 200; paint() } }, { rootMargin: "600px" }).observe(m);
+}
+document.addEventListener("click", e => {
+  const chip = e.target.closest("[data-chip]");
+  if (chip) { const t = T[chip.dataset.chip]; if (REAL(t)) return; t.s = t.s === "sent" ? "drafted" : "sent"; t.s === "sent" ? t.sd = today() : delete t.sd; saveT(); chip.textContent = t.s; return }
+  const r = e.target.closest(".row");
+  if (r) BACK = { slug: r.dataset.s, shown: SHOWN }; if (r) location.hash = "#/" + r.dataset.s });
+
+// how many drafts each sending account already has today (the server fills accounts in order up to each one's cap)
+const usedToday = () => Object.values(T).filter(t => t.d === today()).reduce((m, t) => { m[t.a || ""] = (m[t.a || ""] || 0) + 1; return m }, {});
+
+// today's total across all accounts vs the daily limit; the banner appears once every account has hit its cap
+function dayStatus() {
+  if (!ACC.length) return null;
+  const u = usedToday(), first = ACC[0].email, n = a => (u[a] || 0) + (a === first ? (u[""] || 0) : 0);
+  return { done: ACC.every(a => n(a.email) >= a.cap), count: Object.values(u).reduce((x, y) => x + y, 0), cap: ACC.reduce((x, a) => x + a.cap, 0) };
+}
+function warn() {
+  const s = dayStatus(), w = $("#warn"), c = $("#ctr");
+  if (c) c.textContent = s ? `Today ${s.count}/${s.cap}` : "";
+  if (w) w.innerHTML = s?.done ? `<div class="warn">${s.cap} done for today. Stop sending, come back tomorrow.</div>` : "";
+}
+
+// ---------- company page ----------
+const fill = (text, c, f) => text.replace(/\{(\w+)\}/g, (m, k) => ({ first_name: (f?.name || "").split(" ")[0] || "there", company: c.name,
+  one_liner: (c.one_liner || "what you're building").replace(/\.$/, "").toLowerCase() })[k] ?? m);
+const emailsOf = f => [...new Set([...(f?.emails_found || []), ...(f?.email_guesses || [])])];
+
+// warm the next few companies so "Next" opens instantly
+async function prefetch(list) {
+  for (const c of list) {
+    if (F[c.slug]) continue;
+    try { F[c.slug] = (await api({ action: "founders", slugs: c.slug }))[0]; store.set("yc-founders", F) } catch { return }
+  }
+}
+async function company(slug) {
+  const c = all().find(x => x.slug === slug);
+  if (!c) return location.hash = "";
+  const L = filtered(), i = L.findIndex(x => x.slug === slug), next = L[i + 1];
+  $("#app").innerHTML = `<div id="warn"></div><div class="top"><a href="#" id="back">← All companies</a>${next ? `<a href="#/${esc(next.slug)}">Next: ${esc(next.name)} →</a>` : ""}</div>
+    <h1>${esc(c.name)} ${T[slug] ? (REAL(T[slug]) ? `<span class="tag r-positive">replied</span>` : `<span class="tag">${T[slug].s}</span>`) : ""}</h1>
+    <p class="sub">${esc(c.one_liner)} · ${esc(c.batch)}${c.website ? ` · <a href="${esc(c.website)}" target="_blank" rel="noopener">website</a>` : ""}</p>
+    ${T[slug] ? `<p class="msg" style="margin:-6px 0 10px">${esc(T[slug].s)} ${esc(route_(T[slug]))}</p>` : ""}
+    <div id="box"><p class="msg">Finding founders…</p></div>`;
+  $("#back").onclick = e => { e.preventDefault(); location.hash = "" };
+  warn();
+  if (!F[slug]) {
+    try { F[slug] = (await api({ action: "founders", slugs: slug }))[0]; store.set("yc-founders", F) }
+    catch (e) { return $("#box").innerHTML = `<p class="msg">Couldn't load founders: ${esc(e.message)}</p>` }
+  }
+  if (location.hash !== "#/" + slug) return;
+  prefetch(L.slice(i + 1, i + 4));
+  const fs = F[slug].founders || [];
+  if (!fs.length) return $("#box").innerHTML = `<p class="msg">No founders found for this company.</p>`;
+  $("#box").innerHTML = `<label>To</label><div class="to"><select id="who">${fs.map((f, j) => `<option value="${j}">${esc(f.name)}${f.title ? ` (${esc(f.title)})` : ""}</option>`).join("")}</select>
+    <select id="mail"></select></div>
+    <input class="w" id="custom" placeholder="name@company.com" style="margin-top:8px" hidden>
+    <label>Subject</label><input class="w" id="sub">
+    <label>Message</label><textarea id="body"></textarea>
+    <div class="acts"><button class="primary" id="draft">Create Gmail draft</button><button id="sent">${T[slug]?.s === "sent" ? "Mark not sent" : "Mark sent"}</button><span class="msg" id="msg"></span></div>
+    <div class="rep"><button id="rep" class="${REAL(T[slug] || {}) ? "on" : ""}">${REAL(T[slug] || {}) ? "✓ Got a reply (click to undo)" : "Got a reply"}</button></div>`;
+  $("#rep").onclick = () => {
+    const t = T[slug] = T[slug] || { d: today(), s: "sent", sd: today() };
+    if (REAL(t)) { delete t.r; delete t.rd } else { t.r = "yes"; t.rd = today(); if (t.s !== "sent") { t.s = "sent"; t.sd = t.sd || today() } }
+    saveT(); company(slug);
+  };
+  const pick = () => {
+    const f = fs[+$("#who").value], es = emailsOf(f);
+    $("#mail").innerHTML = es.length ? es.map((m, j) => `<option>${esc(m)}${j >= (f.emails_found || []).length ? " (guess)" : ""}</option>`).join("") : "<option value=''>no email found</option>";
+    $("#mail").insertAdjacentHTML("beforeend", `<option value="__custom">Custom email…</option>`); $("#custom").hidden = true;
+    $("#sub").value = fill(tpl.subject, c, f); $("#body").value = fill(tpl.body, c, f);
+  };
+  $("#who").onchange = pick; pick();
+  $("#mail").onchange = () => { const c = $("#mail").value === "__custom"; $("#custom").hidden = !c; if (c) $("#custom").focus() };
+  $("#draft").onclick = async () => {
+    const to = ($("#mail").value === "__custom" ? $("#custom").value.trim() : $("#mail").value.replace(" (guess)", "")), b = $("#draft");
+    if (!to) return $("#msg").textContent = "No email for this founder.";
+    b.disabled = true; $("#msg").textContent = "Creating draft…";
+    try {
+      const ctl = new AbortController(), kill = setTimeout(() => ctl.abort(), 28000);
+      const res = await fetch("/api/draft", { method: "POST", headers: hdr(), body: JSON.stringify({ to, subject: $("#sub").value, body: $("#body").value, used: usedToday() }), signal: ctl.signal }).catch(e => { throw new Error(e.name === "AbortError" ? "Timed out. Try again." : "No connection. Try again.") });
+      clearTimeout(kill);
+      const noServer = res.status === 404 || res.status === 501;   // only the local/no-Gmail setup falls back to a Gmail compose window
+      const j = noServer ? null : await res.json().catch(() => ({ ok: false, error: `Server error (${res.status}). Try again.` }));
+      if (j && !j.ok) throw new Error(j.error);
+      if (!j) window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent($("#sub").value)}&body=${encodeURIComponent($("#body").value)}`, "_blank");
+      T[slug] = { ...T[slug], s: "drafted", to, d: today(), a: j?.account || "" }; saveT(); warn();
+      $("#msg").textContent = j ? `Draft is in ${j.account}. Open that Gmail, send it, then mark sent.` : "Opened in Gmail. Close it to keep it as a draft, or send it.";
+    } catch (e) { $("#msg").textContent = "Failed: " + e.message }
+    b.disabled = false;
+  };
+  $("#sent").onclick = () => {
+    if (T[slug]?.s === "sent") { delete T[slug].sd; T[slug].s = "drafted" } else T[slug] = { d: today(), ...T[slug], s: "sent", sd: today() };
+    saveT(); company(slug);
+  };
+}
+
+// ---------- tracker page ----------
+let TMODE = "day";
+const dt = s => { const [y, m, d] = s.split("-"); return new Date(+y, +m - 1, +d) };
+const monday = d => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x };
+const keyOf = (d, mode) => mode === "day" ? ymd(d) : mode === "week" ? ymd(monday(d)) : ymd(d).slice(0, 7);
+let ACC = [];   // sending accounts [{email, cap}] from the server
+const COLORS = ["var(--accent)", "#3b82f6", "#10b981"];
+function tracker() {
+  const names = ACC.length ? ACC.map(x => x.email) : ["primary"], who = t => (names.includes(t.a) ? t.a : names[0]);
+  const sentE = Object.values(T).filter(t => t.s === "sent").map(t => ({ d: t.sd || t.d, a: who(t) })).filter(e => e.d);
+  const draftE = Object.values(T).filter(t => t.s === "drafted" || t.s === "sent").map(t => ({ d: t.d, a: who(t) })).filter(e => e.d);
+  const draftN = Object.values(T).filter(t => t.s === "drafted").length;
+  // counts[key][account] and counts[key].all, for sent emails
+  const count = (arr, mode) => arr.reduce((m, e) => { const k = keyOf(dt(e.d), mode); (m[k] = m[k] || { all: 0 }); m[k][e.a] = (m[k][e.a] || 0) + 1; m[k].all++; return m }, {});
+  const now = new Date(), D = count(sentE, "day"), W = count(sentE, "week"), M = count(sentE, "month");
+  const buckets = [];
+  if (TMODE === "day") for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i); buckets.push([ymd(d), d.getDate() + " " + d.toLocaleString("en", { month: "short" }), D]) }
+  if (TMODE === "week") for (let i = 7; i >= 0; i--) { const d = monday(now); d.setDate(d.getDate() - 7 * i); buckets.push([ymd(d), d.getDate() + " " + d.toLocaleString("en", { month: "short" }), W]) }
+  if (TMODE === "month") for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); buckets.push([ymd(d).slice(0, 7), d.toLocaleString("en", { month: "short" }), M]) }
+  const tot = ([k, , src]) => src[k]?.all || 0, max = Math.max(1, ...buckets.map(tot));
+  const first = sentE.length ? sentE.map(e => dt(e.d)).sort((x, y) => x - y)[0] : null, days = [];
+  if (first) for (let d = new Date(first), n = 1; d <= now; d.setDate(d.getDate() + 1), n++) days.push([n, new Date(d), D[ymd(d)] || { all: 0 }]);
+  const sentT = Object.entries(T).filter(([, t]) => t.s === "sent"), replied = sentT.filter(([, t]) => REAL(t)).length;
+  const pct = (a, b) => b ? (a / b * 100).toFixed(1) + "%" : "–";
+  const dueL = sentT.filter(([, t]) => due(t)).map(([k]) => k), nameOf = k => all().find(c => c.slug === k)?.name || k;
+  const repBy = n => { const x = sentT.filter(([, t]) => who(t) === n); return `${x.filter(([, t]) => REAL(t)).length}/${x.length}` };
+  const tk = ymd(now), wk = keyOf(now, "week"), mk = keyOf(now, "month");
+  const draftedToday = a => draftE.filter(e => e.d === tk && e.a === a).length;
+  const split = c => names.filter(n => c[n]).map(n => `${n.split("@")[0]} ${c[n]}`).join(" · ");
+  $("#app").innerHTML = `<div class="hd"><h1>Tracker</h1><button id="back">← Companies</button></div>
+    <div class="cards"><div class="card"><b>${D[tk]?.all || 0}</b><span>sent today</span></div><div class="card"><b>${W[wk]?.all || 0}</b><span>this week</span></div>
+      <div class="card"><b>${M[mk]?.all || 0}</b><span>this month</span></div><div class="card"><b>${sentE.length}</b><span>total sent · ${draftN} drafted</span></div></div>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><b>${pct(replied, sentT.length)}</b><span>reply rate</span></div><div class="card"><b>${replied}</b><span>replied · of ${sentT.length} sent</span></div>
+      <div class="card"><b>${dueL.length}</b><span>due for follow-up</span></div></div>
+    ${dueL.length ? `<p class="msg">Follow up (sent 4+ days ago, no answer): ${dueL.slice(0, 12).map(k => `<a href="#/${esc(k)}">${esc(nameOf(k))}</a>`).join(", ")}${dueL.length > 12 ? ` +${dueL.length - 12} more` : ""}</p>` : ""}
+    <table class="acct"><tr><th>Account</th><th>Today</th><th>Week</th><th>Month</th><th>Total</th><th>Replies</th></tr>
+      ${names.map((n, i) => `<tr><td><i style="background:${COLORS[i % 3]}"></i>${esc(n)}</td><td>${D[tk]?.[n] || 0} sent · ${draftedToday(n)} drafted${ACC[i] ? ` / ${ACC[i].cap}` : ""}</td>
+        <td>${W[wk]?.[n] || 0}</td><td>${M[mk]?.[n] || 0}</td><td>${sentE.filter(e => e.a === n).length}</td><td>${repBy(n)}</td></tr>`).join("")}
+      <tr class="all"><td>All accounts</td><td>${D[tk]?.all || 0} sent</td><td>${W[wk]?.all || 0}</td><td>${M[mk]?.all || 0}</td><td>${sentE.length}</td><td>${replied}/${sentT.length}</td></tr></table>
+    <div class="seg">${["day", "week", "month"].map(m => `<button data-m="${m}" class="${m === TMODE ? "on" : ""}">${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div>
+    <div class="chart">${buckets.map(b => { const c = b[2][b[0]] || { all: 0 };
+      return `<div class="col" title="${b[1]}: ${c.all} sent"><em>${c.all || ""}</em>${names.map((n, i) => c[n] ? `<i style="height:${c[n] / max * 78}%;background:${COLORS[i % 3]}"></i>` : "").join("")}</div>` }).join("")}</div>
+    <div class="labels">${buckets.map(b => `<span>${b[1]}</span>`).join("")}</div>
+    <div class="days">${days.length ? days.reverse().map(([n, d, c]) => `<div><div>Day ${n} <span>· ${d.toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short" })}${c.all ? " · " + split(c) : ""}</span></div><b>${c.all} sent</b></div>`).join("") : `<p class="msg">Nothing sent yet. Mark a draft as sent and it shows up here.</p>`}</div>`;
+  $("#back").onclick = () => location.hash = "";
+  document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { TMODE = b.dataset.m; tracker() });
+}
+
+// ---------- routing and loading ----------
+let LOADING = 0;
+const route = () => {
+  const h = location.hash.slice(2);
+  if (h === "tracker") tracker(); else if (h) company(decodeURIComponent(h)); else list();
+  if (!h && BACK) {   // back on the list: show enough rows and bring the company you opened into view
+    SHOWN = Math.max(SHOWN, BACK.shown); paint();
+    const row = document.querySelector(`.row[data-s="${CSS.escape(BACK.slug)}"]`);
+    if (row) row.scrollIntoView({ block: "center" }); BACK = null;
+  } else window.scrollTo(0, 0);
+};
+window.addEventListener("hashchange", route);
+
+async function start() {
+  if (!PASS) return login();
+  T = store.get("yc-tracker", {});
+  fetch("/api/draft", { headers: hdr() }).then(r => r.json()).then(a => { ACC = a; warn(); if (location.hash === "#/tracker") tracker(); else if (!location.hash) rows(true) }).catch(() => {});
+  fetch("/api/track", { headers: hdr() }).then(r => r.json()).then(t => {
+    const mine = T; T = { ...mine, ...t };   // server wins on conflicts, local-only history is kept and pushed up
+    store.set("yc-tracker", T);
+    if (Object.keys(mine).some(k => !(k in t))) saveT();
+    const h = location.hash; if (h === "#/tracker") tracker(); else if (!h) rows(true);
+  }).catch(() => {});
+  route();
+  try {
+    const batches = (await api({ action: "batches" })).map(b => b.batch).filter(b => b !== "Unspecified");
+    LOADING = batches.length;
+    if (!view.year) { view.year = yearOf(batches[0]); }
+    const missing = batches.filter(b => !BY[b]);
+    let n = 0;
+    await Promise.all([0, 1, 2, 3].map(async () => {
+      while (n < missing.length) {
+        const b = missing[n++];
+        try { BY[b] = await api({ action: "companies", batch: b }); _all = null } catch {}
+        if (!location.hash) { if (!$("#year")) list(); else if (n % 8 === 0) { years(); rows(true) } }
+      }
+    }));
+    store.set("yc-companies2", BY);
+    _all = null; if (!location.hash) { years(); rows(true) }
+  } catch (e) { if (!location.hash) $("#app").insertAdjacentHTML("beforeend", `<p class="msg">Couldn't load companies: ${esc(e.message)}</p>`) }
+  LOADING = 0;
+}
+start();
+</script></body></html>

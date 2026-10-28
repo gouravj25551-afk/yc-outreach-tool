@@ -1,0 +1,18 @@
+# secrets
+.env
+# python
+__pycache__/
+*.pyc
+.DS_Store
+.vercel
+# CLI output: scraped founder data stays local, never committed
+yc_founders*.json
+yc_founders*.csv
+*_apify_raw.json
+tracker.json
+.gmail_app_password
+.site_password
+.env*
+!.env.example
+.env.local
+.gmail_accounts.json

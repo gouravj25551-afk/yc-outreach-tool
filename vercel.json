@@ -1,0 +1,3 @@
+{
+  "functions": { "api/yc.py": { "maxDuration": 60 }, "api/draft.py": { "maxDuration": 30 }, "api/track.py": { "maxDuration": 30 } }
+}
