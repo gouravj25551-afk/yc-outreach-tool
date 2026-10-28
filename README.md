@@ -10,6 +10,28 @@ python3 serve.py        # open http://localhost:8765
 
 Python 3.9+, standard library only. Nothing to install.
 
+## Setup
+
+Copy `.env.example` for the full list of variables. Locally, the simplest way to set them is as plain files next to
+`serve.py` (all gitignored) rather than exporting env vars:
+
+- `.site_password` — one line, the password that gates the site. **Required.**
+- `.gmail_app_password` — one line, a Gmail app password (Google Account -> Security -> 2-Step Verification ->
+  App passwords; not your normal password). Sends drafts from `GMAIL_USER`. Optional — the UI falls back to opening
+  a Gmail compose window instead.
+- `.gmail_accounts.json` — instead of the above, a JSON array to spread sends across several accounts:
+  `[{"email":"a@gmail.com","password":"app-password","cap":20}, ...]`.
+
+Then set `GMAIL_USER` (and `APIFY_TOKEN` / `BLOB_READ_WRITE_TOKEN` if you want those) as real environment variables,
+and run:
+
+```
+GMAIL_USER=you@gmail.com python3 serve.py
+```
+
+On Vercel, set the same names (`SITE_PASSWORD`, `GMAIL_USER`, `GMAIL_APP_PASSWORD` or `GMAIL_ACCOUNTS`, `APIFY_TOKEN`,
+`BLOB_READ_WRITE_TOKEN`) as project environment variables instead of local files.
+
 ## What it does
 
 1. **Pick a batch** (Summer 2005 through the latest) from YC's public directory.
@@ -36,8 +58,9 @@ database and no account.
 
 ## Deploy
 
-Import the repo on [Vercel](https://vercel.com/new). No build step, no environment variables. `index.html` is served
-as a static page and `api/yc.py` runs as a Python serverless function (`vercel.json` gives it 60 s).
+Import the repo on [Vercel](https://vercel.com/new). No build step. Set the environment variables from
+[Setup](#setup) in the project settings. `index.html` is served as a static page, and `api/yc.py`, `api/draft.py`
+and `api/track.py` each run as a Python serverless function (`vercel.json` gives them 60 s).
 
 ## Project layout
 
@@ -45,7 +68,9 @@ as a static page and `api/yc.py` runs as a Python serverless function (`vercel.j
 |---|---|
 | `index.html` | The whole UI: one HTML file with inline CSS and JS, no framework, no build. |
 | `api/yc.py` | Serverless function (Vercel Python runtime, `handler` class). YC search + founder pages. |
-| `serve.py` | Local dev server: serves `index.html` and routes `/api/yc` to the same handler. |
+| `api/draft.py` | Serverless function: saves an email as a Gmail draft via IMAP. |
+| `api/track.py` | Serverless function: the "sent" tracker, persisted in Vercel Blob. |
+| `serve.py` | Local dev server: serves `index.html` and routes `/api/*` to the same handlers. |
 | `vercel.json` | Function timeout. |
 | `yc_scraper.py` | CLI: scrape whole batches to JSON/CSV. |
 | `apify_enrich.py` | CLI: add Apify-found emails to the scraper's output. |
