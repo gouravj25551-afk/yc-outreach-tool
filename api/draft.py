@@ -4,6 +4,7 @@ Needs GMAIL_APP_PASSWORD (a Google app password) in the environment, or a .gmail
 """
 import hmac, imaplib, json, os, time
 from email.message import EmailMessage
+from email.utils import make_msgid
 from http.server import BaseHTTPRequestHandler
 
 ME = os.environ.get("GMAIL_USER", "")
@@ -28,7 +29,7 @@ def accounts():
     return [{"email": ME, "password": pw, "cap": 20}] if pw else []
 
 
-def make_draft(to, subject, body, used=None):
+def make_draft(to, subject, body, used=None, in_reply_to=None, quote=None):
     accts = accounts()
     if not accts:
         return 501, {"ok": False, "error": "no app password"}
@@ -39,13 +40,18 @@ def make_draft(to, subject, body, used=None):
     pick = next((a for a in accts if count(a["email"]) < a.get("cap", 20)), None)
     if not pick:
         return 429, {"ok": False, "error": "Every account is at today's limit. Pick it up again tomorrow."}
-    m = EmailMessage(); m["From"] = pick["email"]; m["Reply-To"] = first; m["To"] = to; m["Subject"] = subject; m.set_content(body)
+    mid = make_msgid(domain="gmail.com")
+    full_body = body + ("\n\n> " + quote.replace("\n", "\n> ") if quote else "")
+    m = EmailMessage(); m["From"] = pick["email"]; m["Reply-To"] = first; m["To"] = to; m["Subject"] = subject; m["Message-ID"] = mid
+    if in_reply_to:   # threads this draft with the email it's following up on, so Gmail groups them and the recipient sees the original below
+        m["In-Reply-To"] = in_reply_to; m["References"] = in_reply_to
+    m.set_content(full_body)
     err = ""
     for _ in range(2):   # Gmail IMAP sometimes stalls from serverless; a short timeout plus one retry beats hanging until the function dies
         try:
             imap = imaplib.IMAP4_SSL("imap.gmail.com", timeout=9); imap.login(pick["email"], pick["password"].replace(" ", ""))
             imap.append("[Gmail]/Drafts", "\\Draft", imaplib.Time2Internaldate(time.time()), m.as_bytes()); imap.logout()
-            return 200, {"ok": True, "account": pick["email"]}
+            return 200, {"ok": True, "account": pick["email"], "message_id": mid}
         except Exception as e:
             err = str(e)[:200] or type(e).__name__
     return 500, {"ok": False, "error": "Gmail didn't respond (" + err + "). Try again."}
@@ -63,7 +69,7 @@ class handler(BaseHTTPRequestHandler):
             if not authed(self.headers):
                 raise PermissionError("Wrong password")
             d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-            status, body = make_draft(d["to"], d["subject"], d["body"], d.get("used"))
+            status, body = make_draft(d["to"], d["subject"], d["body"], d.get("used"), d.get("in_reply_to"), d.get("quote"))
         except Exception as e:
             status, body = (401 if isinstance(e, PermissionError) else 400), {"ok": False, "error": str(e)}
         data = json.dumps(body).encode()

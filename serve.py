@@ -28,7 +28,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/track":
             return self.reply(200, track.save(data))
         if self.path == "/api/draft":
-            code, body = draft.make_draft(data["to"], data["subject"], data["body"], data.get("used"))
+            code, body = draft.make_draft(data["to"], data["subject"], data["body"], data.get("used"), data.get("in_reply_to"), data.get("quote"))
             return self.reply(code, body)
         self.send_error(404)
 

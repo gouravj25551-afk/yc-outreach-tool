@@ -212,10 +212,11 @@ async function company(slug) {
     <div class="rep"><button id="rep" class="${REAL(T[slug] || {}) ? "on" : ""}">${REAL(T[slug] || {}) ? "✓ Got a reply (click to undo)" : "Got a reply"}</button></div>
     ${T[slug] && T[slug].s !== "drafted" ? `<div class="rep" id="fuSec">
       <details class="tp"><summary>Edit follow-up template</summary>
-        <input class="w" id="futsub" value="${esc(futpl.subject)}"><textarea id="futbody">${esc(futpl.body)}</textarea>
-        <p>Use {company} {first_name} {one_liner}</p></details>
+        <textarea id="futbody">${esc(futpl.body)}</textarea>
+        <p>Use {company} {first_name} {one_liner}. Subject is always "Re:" the original, so this stays in the same thread.</p></details>
       <label>Follow-up subject</label><input class="w" id="fusub">
       <label>Follow-up message</label><textarea id="fubody" style="min-height:120px"></textarea>
+      <p class="msg">${T[slug].mid ? "Threaded as a reply to the email you sent - they'll see it quoted below." : "No message-ID saved for the original (sent before this existed) - this'll go out with a matching \"Re:\" subject, but may not thread perfectly."}</p>
       <div class="acts"><button id="fudraft">Send follow-up</button><span class="msg" id="fumsg">${T[slug].fu?.length ? `Followed up ${T[slug].fu.length}× (last ${T[slug].fu[T[slug].fu.length - 1].d})` : ""}</span></div>
     </div>` : ""}`;
   $("#rep").onclick = () => {
@@ -228,7 +229,11 @@ async function company(slug) {
     $("#mail").innerHTML = es.length ? es.map((m, j) => `<option>${esc(m)}${j >= (f.emails_found || []).length ? " (guess)" : ""}</option>`).join("") : "<option value=''>no email found</option>";
     $("#mail").insertAdjacentHTML("beforeend", `<option value="__custom">Custom email…</option>`); $("#custom").hidden = true;
     $("#sub").value = fill(tpl.subject, c, f); $("#body").value = fill(tpl.body, c, f);
-    if ($("#fusub")) { $("#fusub").value = fill(futpl.subject, c, f); $("#fubody").value = fill(futpl.body, c, f) }
+    if ($("#fusub")) {
+      const origSub = T[slug]?.sub || $("#sub").value;
+      $("#fusub").value = /^re:/i.test(origSub) ? origSub : "Re: " + origSub;
+      $("#fubody").value = fill(futpl.body, c, f);
+    }
   };
   $("#who").onchange = pick; pick();
   $("#mail").onchange = () => { const c = $("#mail").value === "__custom"; $("#custom").hidden = !c; if (c) $("#custom").focus() };
@@ -244,7 +249,7 @@ async function company(slug) {
       const j = noServer ? null : await res.json().catch(() => ({ ok: false, error: `Server error (${res.status}). Try again.` }));
       if (j && !j.ok) throw new Error(j.error);
       if (!j) window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent($("#sub").value)}&body=${encodeURIComponent($("#body").value)}`, "_blank");
-      T[slug] = { ...T[slug], s: "drafted", to, d: today(), a: j?.account || "" }; saveT(); warn();
+      T[slug] = { ...T[slug], s: "drafted", to, d: today(), a: j?.account || "", sub: $("#sub").value, body: $("#body").value, mid: j?.message_id || T[slug]?.mid }; saveT(); warn();
       $("#msg").textContent = j ? `Draft is in ${j.account}. Open that Gmail, send it, then mark sent.` : "Opened in Gmail. Close it to keep it as a draft, or send it.";
     } catch (e) { $("#msg").textContent = "Failed: " + e.message }
     b.disabled = false;
@@ -253,7 +258,6 @@ async function company(slug) {
     if (T[slug]?.s === "sent") { delete T[slug].sd; T[slug].s = "drafted" } else T[slug] = { d: today(), ...T[slug], s: "sent", sd: today() };
     saveT(); company(slug);
   };
-  if ($("#futsub")) $("#futsub").oninput = e => { futpl.subject = e.target.value; store.set("yc-futpl", futpl) };
   if ($("#futbody")) $("#futbody").oninput = e => { futpl.body = e.target.value; store.set("yc-futpl", futpl) };
   if ($("#fudraft")) $("#fudraft").onclick = async () => {
     const fstat = fuDayStatus();
@@ -266,12 +270,12 @@ async function company(slug) {
     b.disabled = true; $("#fumsg").textContent = "Sending follow-up…";
     try {
       const ctl = new AbortController(), kill = setTimeout(() => ctl.abort(), 28000);
-      const res = await fetch("/api/draft", { method: "POST", headers: hdr(), body: JSON.stringify({ to, subject: $("#fusub").value, body: $("#fubody").value, used: forcedUsed }), signal: ctl.signal }).catch(e => { throw new Error(e.name === "AbortError" ? "Timed out. Try again." : "No connection. Try again.") });
+      const res = await fetch("/api/draft", { method: "POST", headers: hdr(), body: JSON.stringify({ to, subject: $("#fusub").value, body: $("#fubody").value, used: forcedUsed, in_reply_to: T[slug].mid, quote: T[slug].body }), signal: ctl.signal }).catch(e => { throw new Error(e.name === "AbortError" ? "Timed out. Try again." : "No connection. Try again.") });
       clearTimeout(kill);
       const noServer = res.status === 404 || res.status === 501;
       const j = noServer ? null : await res.json().catch(() => ({ ok: false, error: `Server error (${res.status}). Try again.` }));
       if (j && !j.ok) throw new Error(j.error);
-      if (!j) window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent($("#fusub").value)}&body=${encodeURIComponent($("#fubody").value)}`, "_blank");
+      if (!j) window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent($("#fusub").value)}&body=${encodeURIComponent($("#fubody").value + (T[slug].body ? "\n\n> " + T[slug].body.replace(/\n/g, "\n> ") : ""))}`, "_blank");
       T[slug].fu = T[slug].fu || []; T[slug].fu.push({ d: today(), a: j?.account || chosen.email }); saveT(); warn();
       $("#fumsg").textContent = j ? `Follow-up is in ${j.account}. Open that Gmail and send it.` : "Opened in Gmail. Close it to keep it as a draft, or send it.";
     } catch (e) { $("#fumsg").textContent = "Failed: " + e.message }
