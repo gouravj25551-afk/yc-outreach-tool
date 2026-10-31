@@ -134,7 +134,7 @@ function rows(keep) {
 const from_ = t => t.a || ACC[0]?.email || "primary";   // drafts made before accounts were tracked came from the first account
 const route_ = t => `from ${from_(t)}${t.to ? " → to " + t.to : ""}`;
 const REAL = t => ["yes", "positive", "neutral", "no"].includes(t.r);   // they replied (older finer-grained values count as replied too)
-const due = t => t.s === "sent" && !REAL(t) && t.sd && (new Date(today()) - new Date(t.sd)) / 864e5 >= 4;   // sent 4+ days ago, still no answer
+const due = t => t.s === "sent" && !REAL(t) && t.mid && t.sd && (new Date(today()) - new Date(t.sd)) / 864e5 >= 4;   // sent 4+ days ago, no answer, and has a message-ID so the follow-up can actually thread
 const chipOf = t => REAL(t) ? `<span class="tag r-positive">replied</span>` : `<span class="tag" data-chip="SLUG" title="Click to switch drafted / sent">${t.s}</span>`;
 let SHOWN = 100, LIST = [], BACK = null;   // BACK: where to return to when you come back from a company
 function paint() {
@@ -210,15 +210,15 @@ async function company(slug) {
     <label>Message</label><textarea id="body"></textarea>
     <div class="acts"><button class="primary" id="draft">Create Gmail draft</button><button id="sent">${T[slug]?.s === "sent" ? "Mark not sent" : "Mark sent"}</button><span class="msg" id="msg"></span></div>
     <div class="rep"><button id="rep" class="${REAL(T[slug] || {}) ? "on" : ""}">${REAL(T[slug] || {}) ? "✓ Got a reply (click to undo)" : "Got a reply"}</button></div>
-    ${T[slug] && T[slug].s !== "drafted" ? `<div class="rep" id="fuSec">
+    ${T[slug] && T[slug].s !== "drafted" && T[slug].mid ? `<div class="rep" id="fuSec">
       <details class="tp"><summary>Edit follow-up template</summary>
         <textarea id="futbody">${esc(futpl.body)}</textarea>
         <p>Use {company} {first_name} {one_liner}. Subject is always "Re:" the original, so this stays in the same thread.</p></details>
       <label>Follow-up subject</label><input class="w" id="fusub">
       <label>Follow-up message</label><textarea id="fubody" style="min-height:120px"></textarea>
-      <p class="msg">${T[slug].mid ? "Threaded as a reply to the email you sent - they'll see it quoted below." : "No message-ID saved for the original (sent before this existed) - this'll go out with a matching \"Re:\" subject, but may not thread perfectly."}</p>
+      <p class="msg">Threaded as a reply to the email you sent - they'll see it quoted below.</p>
       <div class="acts"><button id="fudraft">Send follow-up</button><span class="msg" id="fumsg">${T[slug].fu?.length ? `Followed up ${T[slug].fu.length}× (last ${T[slug].fu[T[slug].fu.length - 1].d})` : ""}</span></div>
-    </div>` : ""}`;
+    </div>` : T[slug] && T[slug].s === "sent" ? `<p class="msg">No message-ID saved for this one (sent before follow-up threading existed) - it won't show up in Needs follow-up and there's no follow-up button here.</p>` : ""}`;
   $("#rep").onclick = () => {
     const t = T[slug] = T[slug] || { d: today(), s: "sent", sd: today() };
     if (REAL(t)) { delete t.r; delete t.rd } else { t.r = "yes"; t.rd = today(); if (t.s !== "sent") { t.s = "sent"; t.sd = t.sd || today() } }
