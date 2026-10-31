@@ -356,12 +356,23 @@ const route = () => {
 };
 window.addEventListener("hashchange", route);
 
+// one-time cleanup: follow-ups sent before message-ID threading existed weren't real replies, so wipe just
+// the `fu` history (nothing else - sent/replied/mid stay put) and let future follow-ups rebuild it properly
+function stripOldFu() {
+  if (store.get("yc-fu-reset", false)) return;
+  let changed = false;
+  for (const k in T) { if (T[k].fu) { delete T[k].fu; changed = true } }
+  store.set("yc-fu-reset", true);
+  if (changed) saveT();
+}
 async function start() {
   if (!PASS) return login();
   T = store.get("yc-tracker", {});
+  stripOldFu();
   fetch("/api/draft", { headers: hdr() }).then(r => r.json()).then(a => { ACC = a; warn(); if (location.hash === "#/tracker") tracker(); else if (!location.hash) rows(true) }).catch(() => {});
   fetch("/api/track", { headers: hdr() }).then(r => r.json()).then(t => {
     const mine = T; T = { ...mine, ...t };   // server wins on conflicts, local-only history is kept and pushed up
+    stripOldFu();
     store.set("yc-tracker", T);
     if (Object.keys(mine).some(k => !(k in t))) saveT();
     const h = location.hash; if (h === "#/tracker") tracker(); else if (!h) rows(true);
