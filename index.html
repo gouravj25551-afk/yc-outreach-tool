@@ -56,12 +56,8 @@ I'm {your_background}, and I'd love to explore if there's a role for me at {comp
 {your_links}`
 };
 const DEFAULT_FUTPL = {
-  subject: "Following up - {company}",
-  body: `Hey {first_name},
-
-Any update worth a two-line reply?
-
-- {your_name}`
+  subject: "Quick one - {company}",
+  body: `Hey {first_name}, quick follow-up on this - got 2 mins for a reply?`
 };
 const FU_CAP = 10;   // per account, per day
 const $ = s => document.querySelector(s);
@@ -138,13 +134,13 @@ function rows(keep) {
 const from_ = t => t.a || ACC[0]?.email || "primary";   // drafts made before accounts were tracked came from the first account
 const route_ = t => `from ${from_(t)}${t.to ? " → to " + t.to : ""}`;
 const REAL = t => ["yes", "positive", "neutral", "no"].includes(t.r);   // they replied (older finer-grained values count as replied too)
-const due = t => t.s === "sent" && !REAL(t) && t.sd && (new Date(today()) - new Date(t.sd)) / 864e5 >= 4;   // sent 4+ days ago, no answer yet
+const due = t => t.s === "sent" && !REAL(t);   // sent, no answer yet - the whole follow-up pool, not time-gated
 const chipOf = t => REAL(t) ? `<span class="tag r-positive">replied</span>` : `<span class="tag" data-chip="SLUG" title="Click to switch drafted / sent">${t.s}</span>`;
 let SHOWN = 100, LIST = [], BACK = null;   // BACK: where to return to when you come back from a company
 function paint() {
   const r = $("#rows"); if (!r) return;
   r.innerHTML = LIST.slice(0, SHOWN).map(c => `<div class="row" data-s="${esc(c.slug)}"><span class="n">${esc(c.name)}</span>
-    <span class="o">${esc(c.one_liner)}</span>${T[c.slug] ? `${chipOf(T[c.slug]).replace("SLUG", esc(c.slug))}${T[c.slug].fu?.length ? `<span class="tag r-auto">followed up ×${T[c.slug].fu.length}</span>` : due(T[c.slug]) ? `<span class="tag due">follow up</span>` : ""}<span class="tag acct" title="${esc(route_(T[c.slug]))}">${esc(from_(T[c.slug]).split("@")[0])}</span>` : ""}<span class="b">${c.hiring ? `<b style="color:var(--accent)">hiring</b> · ` : ""}${c.remote ? "remote · " : ""}${esc(c.batch)}</span></div>`).join("")
+    <span class="o">${esc(c.one_liner)}</span>${T[c.slug] ? `${chipOf(T[c.slug]).replace("SLUG", esc(c.slug))}${T[c.slug].fu?.length ? `<span class="tag r-auto" title="${T[c.slug].fu.length}× - last ${T[c.slug].fu[T[c.slug].fu.length - 1].d}">followed up</span>` : ""}<span class="tag acct" title="${esc(route_(T[c.slug]))}">${esc(from_(T[c.slug]).split("@")[0])}</span>` : ""}<span class="b">${c.hiring ? `<b style="color:var(--accent)">hiring</b> · ` : ""}${c.remote ? "remote · " : ""}${esc(c.batch)}</span></div>`).join("")
     + (LIST.length > SHOWN ? `<div id="more" style="height:1px"></div>` : "");
   const m = $("#more"); if (m) new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { o.disconnect(); SHOWN += 200; paint() } }, { rootMargin: "600px" }).observe(m);
 }
@@ -193,13 +189,12 @@ async function company(slug) {
   const c = all().find(x => x.slug === slug);
   if (!c) return location.hash = "";
   const L = filtered(), i = L.findIndex(x => x.slug === slug), next = L[i + 1];
-  $("#app").innerHTML = `<div id="warn"></div><div class="top"><a href="#" id="back">← All companies</a>${next ? `<a href="#/${esc(next.slug)}">Next: ${esc(next.name)} →</a>` : ""}</div>
+  $("#app").innerHTML = `<div class="top"><a href="#" id="back">← All companies</a>${next ? `<a href="#/${esc(next.slug)}">Next: ${esc(next.name)} →</a>` : ""}</div>
     <h1>${esc(c.name)} ${T[slug] ? (REAL(T[slug]) ? `<span class="tag r-positive">replied</span>` : `<span class="tag">${T[slug].s}</span>`) : ""}</h1>
     <p class="sub">${esc(c.one_liner)} · ${esc(c.batch)}${c.website ? ` · <a href="${esc(c.website)}" target="_blank" rel="noopener">website</a>` : ""}</p>
     ${T[slug] ? `<p class="msg" style="margin:-6px 0 10px">${esc(T[slug].s)} ${esc(route_(T[slug]))}</p>` : ""}
     <div id="box"><p class="msg">Finding founders…</p></div>`;
   $("#back").onclick = e => { e.preventDefault(); location.hash = "" };
-  warn();
   if (!F[slug]) {
     try { F[slug] = (await api({ action: "founders", slugs: slug }))[0]; store.set("yc-founders", F) }
     catch (e) { return $("#box").innerHTML = `<p class="msg">Couldn't load founders: ${esc(e.message)}</p>` }
