@@ -134,7 +134,7 @@ function rows(keep) {
 const from_ = t => t.a || ACC[0]?.email || "primary";   // drafts made before accounts were tracked came from the first account
 const route_ = t => `from ${from_(t)}${t.to ? " → to " + t.to : ""}`;
 const REAL = t => ["yes", "positive", "neutral", "no"].includes(t.r);   // they replied (older finer-grained values count as replied too)
-const due = t => t.s === "sent" && !REAL(t);   // sent, no answer yet - the whole follow-up pool, not time-gated
+const due = t => t.s === "sent" && !REAL(t) && t.sd && (new Date(today()) - new Date(t.sd)) / 864e5 >= 4;   // sent 4+ days ago, still no answer
 const chipOf = t => REAL(t) ? `<span class="tag r-positive">replied</span>` : `<span class="tag" data-chip="SLUG" title="Click to switch drafted / sent">${t.s}</span>`;
 let SHOWN = 100, LIST = [], BACK = null;   // BACK: where to return to when you come back from a company
 function paint() {
