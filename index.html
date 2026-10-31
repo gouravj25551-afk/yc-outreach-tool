@@ -55,6 +55,15 @@ I'm {your_background}, and I'd love to explore if there's a role for me at {comp
 - {your_name}
 {your_links}`
 };
+const DEFAULT_FUTPL = {
+  subject: "Following up - {company}",
+  body: `Hey {first_name},
+
+Any update worth a two-line reply?
+
+- {your_name}`
+};
+const FU_CAP = 10;   // per account, per day
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch { return d } },
@@ -74,6 +83,7 @@ function login(msg) {
 }
 
 let tpl = Object.assign({}, DEFAULT_TPL, store.get("yc-tpl", {}));
+let futpl = Object.assign({}, DEFAULT_FUTPL, store.get("yc-futpl", {}));
 let T = {};                                  // tracker: slug -> { s: "drafted" | "sent" }, kept in tracker.json
 let BY = store.get("yc-companies2", {});      // batch -> companies
 let F = store.get("yc-founders", {});        // slug -> founder data
@@ -88,7 +98,7 @@ const yearOf = b => (String(b).match(/\d{4}/) || [""])[0];
 const filtered = () => {
   const q = view.q.toLowerCase();
   return all().filter(c => (!view.year || yearOf(c.batch) === view.year) && (view.fit !== "1" || c.fit) && (!q || (c.name + " " + (c.one_liner || "")).toLowerCase().includes(q))
-    && (!view.st || (view.st === "todo" ? !T[c.slug] : view.st === "replied" ? T[c.slug] && REAL(T[c.slug]) : view.st === "due" ? T[c.slug] && due(T[c.slug]) : T[c.slug]?.s === view.st)));
+    && (!view.st || (view.st === "todo" ? !T[c.slug] : view.st === "replied" ? T[c.slug] && REAL(T[c.slug]) : view.st === "due" ? T[c.slug] && due(T[c.slug]) : view.st === "followed_up" ? T[c.slug]?.fu?.length : T[c.slug]?.s === view.st)));
 };
 
 // ---------- list page ----------
@@ -103,7 +113,7 @@ function list() {
       <select id="year"><option value="">All years</option>${years.map(y => `<option ${y === view.year ? "selected" : ""}>${y}</option>`).join("")}</select>
       <input id="q" placeholder="Search company" value="${esc(view.q)}">
       <select id="fit"><option value="1" ${view.fit === "1" ? "selected" : ""}>Remote-friendly software</option><option value="" ${view.fit ? "" : "selected"}>All companies</option></select>
-      <select id="st">${[["", "All"], ["todo", "To do"], ["drafted", "Drafted"], ["sent", "Sent"], ["replied", "Replied"], ["due", "Follow up"]].map(([v, l]) => `<option value="${v}" ${v === view.st ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select id="st">${[["", "All"], ["todo", "To do"], ["drafted", "Drafted"], ["sent", "Sent"], ["replied", "Replied"], ["due", "Needs follow up"], ["followed_up", "Followed up"]].map(([v, l]) => `<option value="${v}" ${v === view.st ? "selected" : ""}>${l}</option>`).join("")}</select>
     </div><p class="count" id="count"></p><div id="rows"></div>`;
   $("#year").onchange = e => { view.year = e.target.value; store.set("yc-year", view.year); rows() };
   let qt; $("#q").oninput = e => { view.q = e.target.value; clearTimeout(qt); qt = setTimeout(rows, 150) };
@@ -134,7 +144,7 @@ let SHOWN = 100, LIST = [], BACK = null;   // BACK: where to return to when you 
 function paint() {
   const r = $("#rows"); if (!r) return;
   r.innerHTML = LIST.slice(0, SHOWN).map(c => `<div class="row" data-s="${esc(c.slug)}"><span class="n">${esc(c.name)}</span>
-    <span class="o">${esc(c.one_liner)}</span>${T[c.slug] ? `${chipOf(T[c.slug]).replace("SLUG", esc(c.slug))}${due(T[c.slug]) ? `<span class="tag due">follow up</span>` : ""}<span class="tag acct" title="${esc(route_(T[c.slug]))}">${esc(from_(T[c.slug]).split("@")[0])}</span>` : ""}<span class="b">${c.hiring ? `<b style="color:var(--accent)">hiring</b> · ` : ""}${c.remote ? "remote · " : ""}${esc(c.batch)}</span></div>`).join("")
+    <span class="o">${esc(c.one_liner)}</span>${T[c.slug] ? `${chipOf(T[c.slug]).replace("SLUG", esc(c.slug))}${T[c.slug].fu?.length ? `<span class="tag r-auto">followed up ×${T[c.slug].fu.length}</span>` : due(T[c.slug]) ? `<span class="tag due">follow up</span>` : ""}<span class="tag acct" title="${esc(route_(T[c.slug]))}">${esc(from_(T[c.slug]).split("@")[0])}</span>` : ""}<span class="b">${c.hiring ? `<b style="color:var(--accent)">hiring</b> · ` : ""}${c.remote ? "remote · " : ""}${esc(c.batch)}</span></div>`).join("")
     + (LIST.length > SHOWN ? `<div id="more" style="height:1px"></div>` : "");
   const m = $("#more"); if (m) new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { o.disconnect(); SHOWN += 200; paint() } }, { rootMargin: "600px" }).observe(m);
 }
@@ -153,10 +163,18 @@ function dayStatus() {
   const u = usedToday(), first = ACC[0].email, n = a => (u[a] || 0) + (a === first ? (u[""] || 0) : 0);
   return { done: ACC.every(a => n(a.email) >= a.cap), count: Object.values(u).reduce((x, y) => x + y, 0), cap: ACC.reduce((x, a) => x + a.cap, 0) };
 }
+// follow-ups: how many each account has sent/drafted today, capped at FU_CAP per account (so FU_CAP * accounts a day total)
+const usedTodayFU = () => Object.values(T).flatMap(t => t.fu || []).filter(e => e.d === today()).reduce((m, e) => { m[e.a || ""] = (m[e.a || ""] || 0) + 1; return m }, {});
+function fuDayStatus() {
+  if (!ACC.length) return null;
+  const u = usedTodayFU();
+  return { done: ACC.every(a => (u[a.email] || 0) >= FU_CAP), count: Object.values(u).reduce((x, y) => x + y, 0), cap: ACC.length * FU_CAP };
+}
 function warn() {
-  const s = dayStatus(), w = $("#warn"), c = $("#ctr");
-  if (c) c.textContent = s ? `Today ${s.count}/${s.cap}` : "";
-  if (w) w.innerHTML = s?.done ? `<div class="warn">${s.cap} done for today. Stop sending, come back tomorrow.</div>` : "";
+  const s = dayStatus(), fs = fuDayStatus(), w = $("#warn"), c = $("#ctr");
+  if (c) c.textContent = s ? `Today ${s.count}/${s.cap} · follow-ups ${fs.count}/${fs.cap}` : "";
+  if (w) w.innerHTML = (s?.done ? `<div class="warn">${s.cap} done for today. Stop sending, come back tomorrow.</div>` : "")
+    + (fs?.done ? `<div class="warn">${fs.cap} follow-ups done for today. Stop sending, come back tomorrow.</div>` : "");
 }
 
 // ---------- company page ----------
@@ -196,7 +214,15 @@ async function company(slug) {
     <label>Subject</label><input class="w" id="sub">
     <label>Message</label><textarea id="body"></textarea>
     <div class="acts"><button class="primary" id="draft">Create Gmail draft</button><button id="sent">${T[slug]?.s === "sent" ? "Mark not sent" : "Mark sent"}</button><span class="msg" id="msg"></span></div>
-    <div class="rep"><button id="rep" class="${REAL(T[slug] || {}) ? "on" : ""}">${REAL(T[slug] || {}) ? "✓ Got a reply (click to undo)" : "Got a reply"}</button></div>`;
+    <div class="rep"><button id="rep" class="${REAL(T[slug] || {}) ? "on" : ""}">${REAL(T[slug] || {}) ? "✓ Got a reply (click to undo)" : "Got a reply"}</button></div>
+    ${T[slug] && T[slug].s !== "drafted" ? `<div class="rep" id="fuSec">
+      <details class="tp"><summary>Edit follow-up template</summary>
+        <input class="w" id="futsub" value="${esc(futpl.subject)}"><textarea id="futbody">${esc(futpl.body)}</textarea>
+        <p>Use {company} {first_name} {one_liner}</p></details>
+      <label>Follow-up subject</label><input class="w" id="fusub">
+      <label>Follow-up message</label><textarea id="fubody" style="min-height:120px"></textarea>
+      <div class="acts"><button id="fudraft">Send follow-up</button><span class="msg" id="fumsg">${T[slug].fu?.length ? `Followed up ${T[slug].fu.length}× (last ${T[slug].fu[T[slug].fu.length - 1].d})` : ""}</span></div>
+    </div>` : ""}`;
   $("#rep").onclick = () => {
     const t = T[slug] = T[slug] || { d: today(), s: "sent", sd: today() };
     if (REAL(t)) { delete t.r; delete t.rd } else { t.r = "yes"; t.rd = today(); if (t.s !== "sent") { t.s = "sent"; t.sd = t.sd || today() } }
@@ -207,6 +233,7 @@ async function company(slug) {
     $("#mail").innerHTML = es.length ? es.map((m, j) => `<option>${esc(m)}${j >= (f.emails_found || []).length ? " (guess)" : ""}</option>`).join("") : "<option value=''>no email found</option>";
     $("#mail").insertAdjacentHTML("beforeend", `<option value="__custom">Custom email…</option>`); $("#custom").hidden = true;
     $("#sub").value = fill(tpl.subject, c, f); $("#body").value = fill(tpl.body, c, f);
+    if ($("#fusub")) { $("#fusub").value = fill(futpl.subject, c, f); $("#fubody").value = fill(futpl.body, c, f) }
   };
   $("#who").onchange = pick; pick();
   $("#mail").onchange = () => { const c = $("#mail").value === "__custom"; $("#custom").hidden = !c; if (c) $("#custom").focus() };
@@ -231,6 +258,30 @@ async function company(slug) {
     if (T[slug]?.s === "sent") { delete T[slug].sd; T[slug].s = "drafted" } else T[slug] = { d: today(), ...T[slug], s: "sent", sd: today() };
     saveT(); company(slug);
   };
+  if ($("#futsub")) $("#futsub").oninput = e => { futpl.subject = e.target.value; store.set("yc-futpl", futpl) };
+  if ($("#futbody")) $("#futbody").oninput = e => { futpl.body = e.target.value; store.set("yc-futpl", futpl) };
+  if ($("#fudraft")) $("#fudraft").onclick = async () => {
+    const fstat = fuDayStatus();
+    if (fstat?.done) return $("#fumsg").textContent = `${fstat.cap} follow-ups done for today. Stop sending, come back tomorrow.`;
+    const to = ($("#mail").value === "__custom" ? $("#custom").value.trim() : $("#mail").value.replace(" (guess)", "")), b = $("#fudraft");
+    if (!to) return $("#fumsg").textContent = "No email for this founder.";
+    const u = usedTodayFU(), chosen = ACC.find(a => (u[a.email] || 0) < FU_CAP);
+    if (!chosen) return $("#fumsg").textContent = "Every account hit its follow-up cap for today.";
+    const forcedUsed = {}; ACC.forEach(a => forcedUsed[a.email] = a.email === chosen.email ? 0 : a.cap);
+    b.disabled = true; $("#fumsg").textContent = "Sending follow-up…";
+    try {
+      const ctl = new AbortController(), kill = setTimeout(() => ctl.abort(), 28000);
+      const res = await fetch("/api/draft", { method: "POST", headers: hdr(), body: JSON.stringify({ to, subject: $("#fusub").value, body: $("#fubody").value, used: forcedUsed }), signal: ctl.signal }).catch(e => { throw new Error(e.name === "AbortError" ? "Timed out. Try again." : "No connection. Try again.") });
+      clearTimeout(kill);
+      const noServer = res.status === 404 || res.status === 501;
+      const j = noServer ? null : await res.json().catch(() => ({ ok: false, error: `Server error (${res.status}). Try again.` }));
+      if (j && !j.ok) throw new Error(j.error);
+      if (!j) window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent($("#fusub").value)}&body=${encodeURIComponent($("#fubody").value)}`, "_blank");
+      T[slug].fu = T[slug].fu || []; T[slug].fu.push({ d: today(), a: j?.account || chosen.email }); saveT(); warn();
+      $("#fumsg").textContent = j ? `Follow-up is in ${j.account}. Open that Gmail and send it.` : "Opened in Gmail. Close it to keep it as a draft, or send it.";
+    } catch (e) { $("#fumsg").textContent = "Failed: " + e.message }
+    b.disabled = false;
+  };
 }
 
 // ---------- tracker page ----------
@@ -240,43 +291,55 @@ const monday = d => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay(
 const keyOf = (d, mode) => mode === "day" ? ymd(d) : mode === "week" ? ymd(monday(d)) : ymd(d).slice(0, 7);
 let ACC = [];   // sending accounts [{email, cap}] from the server
 const COLORS = ["var(--accent)", "#3b82f6", "#10b981"];
+const count = (arr, mode) => arr.reduce((m, e) => { const k = keyOf(dt(e.d), mode); (m[k] = m[k] || { all: 0 }); m[k][e.a] = (m[k][e.a] || 0) + 1; m[k].all++; return m }, {});
+// builds one half of the tracker (outreach or follow-ups): cards, per-account table, chart, day-by-day list
+function trackerHalf(heading, mode, names, who, sentE, draftE, draftN, replyT, dueL, perCap) {
+  const now = new Date(), D = count(sentE, mode), W = count(sentE, "week"), M = count(sentE, "month");
+  const buckets = [];
+  if (mode === "day") for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i); buckets.push([ymd(d), d.getDate() + " " + d.toLocaleString("en", { month: "short" }), D]) }
+  const Wb = (() => { const b = []; for (let i = 7; i >= 0; i--) { const d = monday(now); d.setDate(d.getDate() - 7 * i); b.push([ymd(d), d.getDate() + " " + d.toLocaleString("en", { month: "short" }), W]) } return b })();
+  const Mb = (() => { const b = []; for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); b.push([ymd(d).slice(0, 7), d.toLocaleString("en", { month: "short" }), M]) } return b })();
+  const useB = mode === "week" ? Wb : mode === "month" ? Mb : buckets;
+  const tot = ([k, , src]) => src[k]?.all || 0, max = Math.max(1, ...useB.map(tot));
+  const first = sentE.length ? sentE.map(e => dt(e.d)).sort((x, y) => x - y)[0] : null, days = [];
+  if (first) for (let d = new Date(first), n = 1; d <= now; d.setDate(d.getDate() + 1), n++) days.push([n, new Date(d), D[ymd(d)] || { all: 0 }]);
+  const replied = replyT.filter(([, t]) => REAL(t)).length;
+  const pct = (a, b) => b ? (a / b * 100).toFixed(1) + "%" : "–";
+  const nameOf = k => all().find(c => c.slug === k)?.name || k;
+  const repBy = n => { const x = replyT.filter(([, t]) => who(t) === n); return `${x.filter(([, t]) => REAL(t)).length}/${x.length}` };
+  const tk = ymd(now), wk = keyOf(now, "week"), mk = keyOf(now, "month");
+  const draftedToday = a => draftE.filter(e => e.d === tk && e.a === a).length;
+  const split = c => names.filter(n => c[n]).map(n => `${n.split("@")[0]} ${c[n]}`).join(" · ");
+  return `<h2 style="font-size:16px;margin:22px 0 10px">${heading}</h2>
+    <div class="cards"><div class="card"><b>${D[tk]?.all || 0}</b><span>sent today</span></div><div class="card"><b>${W[wk]?.all || 0}</b><span>this week</span></div>
+      <div class="card"><b>${M[mk]?.all || 0}</b><span>this month</span></div><div class="card"><b>${sentE.length}</b><span>total sent${draftN ? ` · ${draftN} drafted` : ""}</span></div></div>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><b>${pct(replied, replyT.length)}</b><span>reply rate</span></div><div class="card"><b>${replied}</b><span>replied · of ${replyT.length} sent</span></div>
+      <div class="card"><b>${dueL.length}</b><span>due for follow-up</span></div></div>
+    ${dueL.length ? `<p class="msg">${dueL.slice(0, 12).map(k => `<a href="#/${esc(k)}">${esc(nameOf(k))}</a>`).join(", ")}${dueL.length > 12 ? ` +${dueL.length - 12} more` : ""}</p>` : ""}
+    <table class="acct"><tr><th>Account</th><th>Today</th><th>Week</th><th>Month</th><th>Total</th><th>Replies</th></tr>
+      ${names.map((n, i) => `<tr><td><i style="background:${COLORS[i % 3]}"></i>${esc(n)}</td><td>${D[tk]?.[n] || 0} sent${draftedToday(n) ? ` · ${draftedToday(n)} drafted` : ""}${perCap ? ` / ${perCap}` : ""}</td>
+        <td>${W[wk]?.[n] || 0}</td><td>${M[mk]?.[n] || 0}</td><td>${sentE.filter(e => e.a === n).length}</td><td>${repBy(n)}</td></tr>`).join("")}
+      <tr class="all"><td>All accounts</td><td>${D[tk]?.all || 0} sent</td><td>${W[wk]?.all || 0}</td><td>${M[mk]?.all || 0}</td><td>${sentE.length}</td><td>${replied}/${replyT.length}</td></tr></table>
+    <div class="chart">${useB.map(b => { const c = b[2][b[0]] || { all: 0 };
+      return `<div class="col" title="${b[1]}: ${c.all} sent"><em>${c.all || ""}</em>${names.map((n, i) => c[n] ? `<i style="height:${c[n] / max * 78}%;background:${COLORS[i % 3]}"></i>` : "").join("")}</div>` }).join("")}</div>
+    <div class="labels">${useB.map(b => `<span>${b[1]}</span>`).join("")}</div>
+    <div class="days">${days.length ? days.reverse().map(([n, d, c]) => `<div><div>Day ${n} <span>· ${d.toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short" })}${c.all ? " · " + split(c) : ""}</span></div><b>${c.all} sent</b></div>`).join("") : `<p class="msg">Nothing sent yet.</p>`}</div>`;
+}
 function tracker() {
   const names = ACC.length ? ACC.map(x => x.email) : ["primary"], who = t => (names.includes(t.a) ? t.a : names[0]);
   const sentE = Object.values(T).filter(t => t.s === "sent").map(t => ({ d: t.sd || t.d, a: who(t) })).filter(e => e.d);
   const draftE = Object.values(T).filter(t => t.s === "drafted" || t.s === "sent").map(t => ({ d: t.d, a: who(t) })).filter(e => e.d);
   const draftN = Object.values(T).filter(t => t.s === "drafted").length;
-  // counts[key][account] and counts[key].all, for sent emails
-  const count = (arr, mode) => arr.reduce((m, e) => { const k = keyOf(dt(e.d), mode); (m[k] = m[k] || { all: 0 }); m[k][e.a] = (m[k][e.a] || 0) + 1; m[k].all++; return m }, {});
-  const now = new Date(), D = count(sentE, "day"), W = count(sentE, "week"), M = count(sentE, "month");
-  const buckets = [];
-  if (TMODE === "day") for (let i = 13; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i); buckets.push([ymd(d), d.getDate() + " " + d.toLocaleString("en", { month: "short" }), D]) }
-  if (TMODE === "week") for (let i = 7; i >= 0; i--) { const d = monday(now); d.setDate(d.getDate() - 7 * i); buckets.push([ymd(d), d.getDate() + " " + d.toLocaleString("en", { month: "short" }), W]) }
-  if (TMODE === "month") for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); buckets.push([ymd(d).slice(0, 7), d.toLocaleString("en", { month: "short" }), M]) }
-  const tot = ([k, , src]) => src[k]?.all || 0, max = Math.max(1, ...buckets.map(tot));
-  const first = sentE.length ? sentE.map(e => dt(e.d)).sort((x, y) => x - y)[0] : null, days = [];
-  if (first) for (let d = new Date(first), n = 1; d <= now; d.setDate(d.getDate() + 1), n++) days.push([n, new Date(d), D[ymd(d)] || { all: 0 }]);
-  const sentT = Object.entries(T).filter(([, t]) => t.s === "sent"), replied = sentT.filter(([, t]) => REAL(t)).length;
-  const pct = (a, b) => b ? (a / b * 100).toFixed(1) + "%" : "–";
-  const dueL = sentT.filter(([, t]) => due(t)).map(([k]) => k), nameOf = k => all().find(c => c.slug === k)?.name || k;
-  const repBy = n => { const x = sentT.filter(([, t]) => who(t) === n); return `${x.filter(([, t]) => REAL(t)).length}/${x.length}` };
-  const tk = ymd(now), wk = keyOf(now, "week"), mk = keyOf(now, "month");
-  const draftedToday = a => draftE.filter(e => e.d === tk && e.a === a).length;
-  const split = c => names.filter(n => c[n]).map(n => `${n.split("@")[0]} ${c[n]}`).join(" · ");
+  const sentT = Object.entries(T).filter(([, t]) => t.s === "sent");
+  const dueL = sentT.filter(([, t]) => due(t)).map(([k]) => k);
+  // follow-ups: every {d, a} entry across companies, independent of the outreach send tracking above
+  const fuWho = a => names.includes(a) ? a : names[0];
+  const fuE = Object.entries(T).flatMap(([, t]) => (t.fu || []).map(e => ({ d: e.d, a: fuWho(e.a) })));
+  const fuDueL = Object.entries(T).filter(([, t]) => t.s === "sent" && !REAL(t) && t.fu?.length && (() => { const last = t.fu[t.fu.length - 1]; return (new Date(today()) - new Date(last.d)) / 864e5 >= 4 })()).map(([k]) => k);
   $("#app").innerHTML = `<div class="hd"><h1>Tracker</h1><button id="back">← Companies</button></div>
-    <div class="cards"><div class="card"><b>${D[tk]?.all || 0}</b><span>sent today</span></div><div class="card"><b>${W[wk]?.all || 0}</b><span>this week</span></div>
-      <div class="card"><b>${M[mk]?.all || 0}</b><span>this month</span></div><div class="card"><b>${sentE.length}</b><span>total sent · ${draftN} drafted</span></div></div>
-    <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><b>${pct(replied, sentT.length)}</b><span>reply rate</span></div><div class="card"><b>${replied}</b><span>replied · of ${sentT.length} sent</span></div>
-      <div class="card"><b>${dueL.length}</b><span>due for follow-up</span></div></div>
-    ${dueL.length ? `<p class="msg">Follow up (sent 4+ days ago, no answer): ${dueL.slice(0, 12).map(k => `<a href="#/${esc(k)}">${esc(nameOf(k))}</a>`).join(", ")}${dueL.length > 12 ? ` +${dueL.length - 12} more` : ""}</p>` : ""}
-    <table class="acct"><tr><th>Account</th><th>Today</th><th>Week</th><th>Month</th><th>Total</th><th>Replies</th></tr>
-      ${names.map((n, i) => `<tr><td><i style="background:${COLORS[i % 3]}"></i>${esc(n)}</td><td>${D[tk]?.[n] || 0} sent · ${draftedToday(n)} drafted${ACC[i] ? ` / ${ACC[i].cap}` : ""}</td>
-        <td>${W[wk]?.[n] || 0}</td><td>${M[mk]?.[n] || 0}</td><td>${sentE.filter(e => e.a === n).length}</td><td>${repBy(n)}</td></tr>`).join("")}
-      <tr class="all"><td>All accounts</td><td>${D[tk]?.all || 0} sent</td><td>${W[wk]?.all || 0}</td><td>${M[mk]?.all || 0}</td><td>${sentE.length}</td><td>${replied}/${sentT.length}</td></tr></table>
     <div class="seg">${["day", "week", "month"].map(m => `<button data-m="${m}" class="${m === TMODE ? "on" : ""}">${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div>
-    <div class="chart">${buckets.map(b => { const c = b[2][b[0]] || { all: 0 };
-      return `<div class="col" title="${b[1]}: ${c.all} sent"><em>${c.all || ""}</em>${names.map((n, i) => c[n] ? `<i style="height:${c[n] / max * 78}%;background:${COLORS[i % 3]}"></i>` : "").join("")}</div>` }).join("")}</div>
-    <div class="labels">${buckets.map(b => `<span>${b[1]}</span>`).join("")}</div>
-    <div class="days">${days.length ? days.reverse().map(([n, d, c]) => `<div><div>Day ${n} <span>· ${d.toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short" })}${c.all ? " · " + split(c) : ""}</span></div><b>${c.all} sent</b></div>`).join("") : `<p class="msg">Nothing sent yet. Mark a draft as sent and it shows up here.</p>`}</div>`;
+    ${trackerHalf("Outreach", TMODE, names, who, sentE, draftE, draftN, sentT, dueL, ACC[0]?.cap)}
+    ${trackerHalf("Follow-ups", TMODE, names, fuWho, fuE, [], 0, sentT.filter(([k]) => T[k].fu?.length), fuDueL, FU_CAP)}`;
   $("#back").onclick = () => location.hash = "";
   document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { TMODE = b.dataset.m; tracker() });
 }

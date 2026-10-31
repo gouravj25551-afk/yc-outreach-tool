@@ -52,6 +52,10 @@ On Vercel, set the same names (`SITE_PASSWORD`, `GMAIL_USER`, `GMAIL_APP_PASSWOR
    the right address was somewhere in the guess list 93% of the time.
 4. **Write once, send many.** Fill in your name and links, edit the subject and body, and every draft updates live.
    Copy the text or open it in your mail app. Mark companies as sent to hide them.
+5. **Follow up.** Once a company is marked sent, a short follow-up template ("Any update worth a two-line reply?")
+   appears on its page. Follow-ups are capped at 10 per Gmail account per day (so 10 × your number of accounts
+   total) - once every account hits that cap, sending is blocked for the day with a warning. The tracker page is
+   split into an Outreach half and a Follow-ups half, each with its own daily/weekly/monthly counts.
 
 Your details, template, "sent" marks and loaded batches are stored in your browser (`localStorage`). There's no
 database and no account.
