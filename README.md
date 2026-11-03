@@ -22,6 +22,12 @@ Copy `.env.example` for the full list of variables. Locally, the simplest way to
 - `.gmail_accounts.json` — instead of the above, a JSON array to spread sends across several accounts:
   `[{"email":"a@gmail.com","password":"app-password","cap":20}, ...]`.
 
+For the three-account rotation, copy `gmail_accounts.example.json` to `.gmail_accounts.json`, then put each
+account's Gmail app password in its `password` field. The tool creates the first 20 drafts in
+`gouravjain3107@gmail.com`, the next 20 in `gj9853@gmail.com`, and the last 20 in
+`gouravjain6969@gmail.com`. The limit resets at local midnight. Creating a draft consumes one slot even if you
+later delete it or decide not to send it.
+
 Then set `GMAIL_USER` (and `APIFY_TOKEN` / `BLOB_READ_WRITE_TOKEN` if you want those) as real environment variables,
 and run:
 

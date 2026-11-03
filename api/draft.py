@@ -1,4 +1,4 @@
-"""POST /api/draft  {to, subject, body} -> saves a draft in the Gmail account's Drafts via IMAP.
+"""POST /api/draft {to, subject, body, used} -> saves a draft in the next Gmail account with room today.
 
 Needs GMAIL_APP_PASSWORD (a Google app password) in the environment, or a .gmail_app_password file next to the repo root locally.
 """
@@ -24,7 +24,23 @@ def accounts():
     """Sending accounts in fill order: GMAIL_ACCOUNTS env (JSON) or .gmail_accounts.json, else the single app-password account."""
     raw = os.environ.get("GMAIL_ACCOUNTS") or (open(ACCFILE).read() if os.path.exists(ACCFILE) else "")
     if raw:
-        return json.loads(raw)
+        configured = json.loads(raw)
+        if not isinstance(configured, list):
+            raise ValueError("GMAIL_ACCOUNTS must be a JSON array")
+        seen = set()
+        for account in configured:
+            email = account.get("email", "").strip().lower()
+            if not email or "@" not in email or email in seen:
+                raise ValueError("Each Gmail account needs a unique email address")
+            if not isinstance(account.get("password"), str) or not account["password"].strip():
+                raise ValueError("Add a Gmail app password for " + email)
+            cap = account.get("cap", 20)
+            if type(cap) is not int or not 1 <= cap <= 20:
+                raise ValueError("Daily account caps must be between 1 and 20")
+            account["email"] = email
+            account["cap"] = cap
+            seen.add(email)
+        return configured
     pw = os.environ.get("GMAIL_APP_PASSWORD") or (open(PWFILE).read().strip() if os.path.exists(PWFILE) else "")
     return [{"email": ME, "password": pw, "cap": 20}] if pw else []
 
@@ -33,10 +49,10 @@ def make_draft(to, subject, body, used=None, in_reply_to=None, quote=None):
     accts = accounts()
     if not accts:
         return 501, {"ok": False, "error": "no app password"}
-    used = used or {}
+    used = used if isinstance(used, dict) else {}
     first = accts[0]["email"]
     # drafts made before accounts were tracked have no account name; they were all from the first one
-    count = lambda a: used.get(a, 0) + (used.get("", 0) if a == first else 0)
+    count = lambda a: max(0, int(used.get(a, 0))) + (max(0, int(used.get("", 0))) if a == first else 0)
     pick = next((a for a in accts if count(a["email"]) < a.get("cap", 20)), None)
     if not pick:
         return 429, {"ok": False, "error": "Every account is at today's limit. Pick it up again tomorrow."}

@@ -150,7 +150,7 @@ document.addEventListener("click", e => {
   const r = e.target.closest(".row");
   if (r) BACK = { slug: r.dataset.s, shown: SHOWN }; if (r) location.hash = "#/" + r.dataset.s });
 
-// how many drafts each sending account already has today (the server fills accounts in order up to each one's cap)
+// how many drafts each sending account already has today (creating a draft consumes a slot)
 const usedToday = () => Object.values(T).filter(t => t.d === today()).reduce((m, t) => { m[t.a || ""] = (m[t.a || ""] || 0) + 1; return m }, {});
 
 // today's total across all accounts vs the daily limit; the banner appears once every account has hit its cap
@@ -168,7 +168,7 @@ function fuDayStatus() {
 }
 function warn() {
   const s = dayStatus(), fs = fuDayStatus(), w = $("#warn"), c = $("#ctr");
-  if (c) c.textContent = s ? `Today ${s.count}/${s.cap} · follow-ups ${fs.count}/${fs.cap}` : "";
+  if (c) c.textContent = s ? `Drafts today ${s.count}/${s.cap} · follow-ups ${fs.count}/${fs.cap}` : "";
   if (w) w.innerHTML = (s?.done ? `<div class="warn">${s.cap} done for today. Stop sending, come back tomorrow.</div>` : "")
     + (fs?.done ? `<div class="warn">${fs.cap} follow-ups done for today. Stop sending, come back tomorrow.</div>` : "");
 }
